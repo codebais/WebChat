@@ -3,23 +3,28 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
+ "scripts": {
+  "start": "node server.js",
+  "dev": "nodemon server.js --ignore uploads/ --ignore uploads/temp/"
+},
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1169.0",
+    "@aws-sdk/s3-request-presigner": "^3.1169.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^18.0.9",
     "express": "^5.3.0",
+    "ffmpeg-static": "^5.3.0",
     "jsonwebtoken": "^9.0.3",
     "mongodb": "^7.7.0",
     "mongoose": "^9.11.4",
     "multer": "^2.5.0",
     "nodemailer": "^10.2.1",
+    "sharp": "^0.35.5",
     "socket.io": "^4.8.4"
   }
 }

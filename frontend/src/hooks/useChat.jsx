@@ -13,6 +13,7 @@ function useChat() {
   const [search, setSearch] = useState("");
 
   const [messages, setMessages] = useState([]);
+  const [mediaUrls, setMediaUrls] = useState({});
   const [messageStatuses, setMessageStatuses] = useState({});
   const [newMessage, setNewMessage] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
@@ -172,6 +173,40 @@ function useChat() {
     setFriendTyping(false);
     loadMessages();
   }, [selectedFriend]);
+
+useEffect(() => {
+  const token = localStorage.getItem("token");
+
+  if (!token || messages.length === 0) return;
+
+  messages.forEach(async (message) => {
+    if (!message.mediaKey || mediaUrls[message._id]) return;
+
+    try {
+      const response = await fetch(
+        `http://localhost:5000/api/messages/media/${message._id}/url`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Unable to load media.");
+      }
+
+      setMediaUrls((previous) => ({
+        ...previous,
+        [message._id]: data.mediaUrl,
+      }));
+    } catch (error) {
+      console.error("Media loading error:", error.message);
+    }
+  });
+}, [messages, mediaUrls]);
 
   useEffect(() => {
     if (!selectedFriend) return;
@@ -468,6 +503,7 @@ function useChat() {
     search,
     setSearch,
     messages,
+    mediaUrls,
     messageStatuses,
     newMessage,
     setNewMessage,
@@ -485,6 +521,7 @@ function useChat() {
     uploading,
     handleFileSelect,
     sendMedia,
+    
   };
 }
 

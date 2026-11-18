@@ -1,4 +1,3 @@
-
 const mongoose = require("mongoose");
 
 const messageSchema = new mongoose.Schema(
@@ -42,8 +41,12 @@ const messageSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    mediaKey: {
+      type: String,
+      default: "",
+    },
   },
-  { timestamps: true }
+  { timestamps: true },
 );
 
 module.exports = mongoose.model("Message", messageSchema);

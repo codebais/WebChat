@@ -10,6 +10,7 @@ function DesktopChat({ chat }) {
     search,
     setSearch,
     messages,
+    mediaUrls,
     messageStatuses,
     newMessage,
     loading,
@@ -30,7 +31,7 @@ function DesktopChat({ chat }) {
 
   const [sidebarWidth, setSidebarWidth] = useState(30);
   const [isDragging, setIsDragging] = useState(false);
-
+const [activeVideo, setActiveVideo] = useState(null);
   const chatContainerRef = useRef(null);
 
   useEffect(() => {
@@ -366,25 +367,33 @@ function DesktopChat({ chat }) {
                             isMine ? "bg-[#005C4B]" : "bg-[#202C33]"
                           }`}
                         >
-{message.mediaType === "image" && message.mediaUrl && (
-  <img
-    src={`http://localhost:5000${message.mediaUrl}`}
-    alt="Shared photo"
-    className="max-h-72 max-w-full rounded-lg object-contain"
-  />
-)}
+                          {message.mediaType &&
+                            (mediaUrls?.[message._id] ? (
+                              message.mediaType === "image" ? (
+                                <img
+                                  src={mediaUrls[message._id]}
+                                  alt="Shared photo"
+                                  className="max-h-72 max-w-full rounded-lg object-contain"
+                                />
+                              ) : (
+                                <video
+                                  src={mediaUrls[message._id]}
+                                  controls
+                                  preload="metadata"
+                                  className="max-h-72 max-w-full rounded-lg"
+                                />
+                              )
+                            ) : (
+                              <p className="text-xs text-[#8696A0]">
+                                Loading media...
+                              </p>
+                            ))}
 
-{message.mediaType === "video" && message.mediaUrl && (
-  <video
-    src={`http://localhost:5000${message.mediaUrl}`}
-    controls
-    className="max-h-72 max-w-full rounded-lg"
-  />
-)}
-
-{message.text && (
-  <p className="text-sm whitespace-pre-wrap">{message.text}</p>
-)}
+                          {message.text && (
+                            <p className="text-sm whitespace-pre-wrap">
+                              {message.text}
+                            </p>
+                          )}
                           {isMine && (
                             <div className="mt-1 flex justify-end">
                               <span
