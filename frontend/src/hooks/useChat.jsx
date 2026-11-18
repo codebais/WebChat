@@ -8,7 +8,7 @@ function useChat() {
   const [myProfile, setMyProfile] = useState(null);
   const [connections, setConnections] = useState([]);
   const [requestCount, setRequestCount] = useState(0);
-
+  const [groups, setGroups] = useState([]);
   const [selectedFriend, setSelectedFriend] = useState(null);
   const [search, setSearch] = useState("");
 
@@ -53,11 +53,14 @@ function useChat() {
           "http://localhost:5000/api/users/connections",
           { headers },
         );
-
+        const groupsRes = await fetch("http://localhost:5000/api/groups", {
+          headers,
+        });
         if (
           profileRes.status === 401 ||
           requestsRes.status === 401 ||
-          connectionsRes.status === 401
+          connectionsRes.status === 401 ||
+          groupsRes.status === 401
         ) {
           localStorage.removeItem("token");
           localStorage.removeItem("email");
@@ -66,14 +69,19 @@ function useChat() {
           return;
         }
 
-        if (!profileRes.ok || !requestsRes.ok || !connectionsRes.ok) {
+        if (
+          !profileRes.ok ||
+          !requestsRes.ok ||
+          !connectionsRes.ok ||
+          !groupsRes.ok
+        ) {
           throw new Error("Unable to load data");
         }
 
         const profileData = await profileRes.json();
         const requestsData = await requestsRes.json();
         const connectionsData = await connectionsRes.json();
-
+        const groupsData = await groupsRes.json();
         setMyProfile({
           ...profileData.user,
           _id: profileData.user.id,
@@ -81,6 +89,7 @@ function useChat() {
 
         setRequestCount(requestsData.requests.length);
         setConnections(connectionsData.connections);
+        setGroups(groupsData.groups);
       } catch (error) {
         console.log(error);
         setChatError(error.message);
@@ -174,39 +183,39 @@ function useChat() {
     loadMessages();
   }, [selectedFriend]);
 
-useEffect(() => {
-  const token = localStorage.getItem("token");
+  useEffect(() => {
+    const token = localStorage.getItem("token");
 
-  if (!token || messages.length === 0) return;
+    if (!token || messages.length === 0) return;
 
-  messages.forEach(async (message) => {
-    if (!message.mediaKey || mediaUrls[message._id]) return;
+    messages.forEach(async (message) => {
+      if (!message.mediaKey || mediaUrls[message._id]) return;
 
-    try {
-      const response = await fetch(
-        `http://localhost:5000/api/messages/media/${message._id}/url`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
+      try {
+        const response = await fetch(
+          `http://localhost:5000/api/messages/media/${message._id}/url`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
           },
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message || "Unable to load media.");
         }
-      );
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Unable to load media.");
+        setMediaUrls((previous) => ({
+          ...previous,
+          [message._id]: data.mediaUrl,
+        }));
+      } catch (error) {
+        console.error("Media loading error:", error.message);
       }
-
-      setMediaUrls((previous) => ({
-        ...previous,
-        [message._id]: data.mediaUrl,
-      }));
-    } catch (error) {
-      console.error("Media loading error:", error.message);
-    }
-  });
-}, [messages, mediaUrls]);
+    });
+  }, [messages, mediaUrls]);
 
   useEffect(() => {
     if (!selectedFriend) return;
@@ -351,6 +360,24 @@ useEffect(() => {
         messagesContainerRef.current.scrollHeight;
     }
   }, [messages, friendTyping, selectedFriend]);
+
+  useEffect(() => {
+    const handleNewGroup = (group) => {
+      setGroups((previous) => {
+        if (previous.some((item) => item._id === group._id)) {
+          return previous;
+        }
+
+        return [group, ...previous];
+      });
+    };
+
+    socket.on("new_group", handleNewGroup);
+
+    return () => {
+      socket.off("new_group", handleNewGroup);
+    };
+  }, []);
   const getPhoto = (picture) => {
     if (!picture) return "";
 
@@ -468,6 +495,50 @@ useEffect(() => {
       setUploading(false);
     }
   };
+
+  const createGroup = async (groupName, selectedMembers) => {
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      navigate("/login");
+      return false;
+    }
+
+    try {
+      const response = await fetch("http://localhost:5000/api/groups", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: groupName.trim(),
+          members: selectedMembers,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to create group");
+      }
+
+      setGroups((previous) => {
+        if (previous.some((group) => group._id === data.group._id)) {
+          return previous;
+        }
+
+        return [data.group, ...previous];
+      });
+
+      setChatError("");
+      return true;
+    } catch (error) {
+      setChatError(error.message);
+      return false;
+    }
+  };
+
   const sendMessage = (e) => {
     e.preventDefault();
 
@@ -497,6 +568,8 @@ useEffect(() => {
     navigate,
     myProfile,
     connections,
+    groups,
+    createGroup,
     requestCount,
     selectedFriend,
     setSelectedFriend,
@@ -521,7 +594,6 @@ useEffect(() => {
     uploading,
     handleFileSelect,
     sendMedia,
-    
   };
 }
 

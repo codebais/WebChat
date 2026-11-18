@@ -4,6 +4,8 @@ function DesktopChat({ chat }) {
   const {
     navigate,
     myProfile,
+    groups,
+    createGroup,
     requestCount,
     selectedFriend,
     setSelectedFriend,
@@ -31,7 +33,10 @@ function DesktopChat({ chat }) {
 
   const [sidebarWidth, setSidebarWidth] = useState(30);
   const [isDragging, setIsDragging] = useState(false);
-const [activeVideo, setActiveVideo] = useState(null);
+  const [activeVideo, setActiveVideo] = useState(null);
+  const [showGroupModal, setShowGroupModal] = useState(false);
+  const [groupName, setGroupName] = useState("");
+  const [selectedMembers, setSelectedMembers] = useState([]);
   const chatContainerRef = useRef(null);
 
   useEffect(() => {
@@ -204,12 +209,48 @@ const [activeVideo, setActiveVideo] = useState(null);
               [scrollbar-width:thin]
               [scrollbar-color:#2A3942_#202C33]"
           >
+{!loading &&
+  groups
+    .filter((group) =>
+      group.name.toLowerCase().includes(search.toLowerCase())
+    )
+    .map((group) => (
+      <div
+        key={group._id}
+        className="flex items-center gap-3 border-b border-[#2A3942] px-4 py-4"
+      >
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#075E54] text-xl text-white">
+          <svg
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+            <circle cx="10" cy="7" r="4" />
+            <path d="M20 8a4 4 0 0 1 0 8" />
+            <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+          </svg>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          <h3 className="truncate font-medium">{group.name}</h3>
+          <p className="mt-1 text-xs text-[#8696A0]">
+            {group.members.length} members
+          </p>
+        </div>
+      </div>
+    ))}
+
             {loading ? (
               <p className="p-6 text-center text-sm text-[#8696A0]">
                 Loading chats...
               </p>
-            ) : filteredConnections.length === 0 ? (
-              <div className="px-6 py-12 text-center">
+) : filteredConnections.length === 0 && groups.length === 0 ? (              <div className="px-6 py-12 text-center">
                 <h3 className="font-semibold">No chats yet</h3>
 
                 <p className="mt-2 text-sm text-[#8696A0]">
@@ -533,6 +574,103 @@ const [activeVideo, setActiveVideo] = useState(null);
           )}
         </main>
       </div>
+      <button
+        type="button"
+        onClick={() => setShowGroupModal(true)}
+        title="Create Group"
+        className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[#00A884] text-3xl text-white shadow-xl transition hover:bg-[#008F72]"
+      >
+        +
+      </button>
+
+      {showGroupModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-[#2A3942] bg-[#202C33] p-5">
+            <div className="mb-5 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-white">
+                Create New Group
+              </h2>
+
+              <button
+                type="button"
+                onClick={() => setShowGroupModal(false)}
+                className="text-2xl text-[#8696A0]"
+              >
+                ×
+              </button>
+            </div>
+
+            <input
+              type="text"
+              placeholder="Enter group name"
+              value={groupName}
+              onChange={(e) => setGroupName(e.target.value)}
+              className="mb-4 w-full rounded-lg bg-[#2A3942] px-4 py-3 text-white outline-none"
+            />
+
+            <h3 className="mb-3 text-sm font-semibold text-[#AEBAC1]">
+              Select group members
+            </h3>
+
+            <div className="max-h-64 space-y-2 overflow-y-auto">
+              {filteredConnections.map((item) => {
+                const friend = item.user;
+                const isSelected = selectedMembers.includes(friend._id);
+
+                return (
+                  <label
+                    key={item.requestId}
+                    className="flex cursor-pointer items-center gap-3 rounded-lg p-3 hover:bg-[#2A3942]"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => {
+                        setSelectedMembers((previous) =>
+                          isSelected
+                            ? previous.filter((id) => id !== friend._id)
+                            : [...previous, friend._id],
+                        );
+                      }}
+                      className="h-4 w-4 accent-[#00A884]"
+                    />
+
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#075E54] font-semibold text-white">
+                      {friend.username?.charAt(0).toUpperCase() || "U"}
+                    </div>
+
+                    <div>
+                      <p className="text-sm font-medium text-white">
+                        {friend.name}
+                      </p>
+                      <p className="text-xs text-[#8696A0]">
+                        @{friend.username}
+                      </p>
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              disabled={!groupName.trim() || selectedMembers.length === 0}
+              onClick={async () => {
+                const success = await createGroup(groupName, selectedMembers);
+
+                if (success) {
+                  setGroupName("");
+                  setSelectedMembers([]);
+                  setShowGroupModal(false);
+                }
+              }}
+              className="mt-5 w-full rounded-lg bg-[#00A884] py-3 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Create Group
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

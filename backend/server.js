@@ -14,6 +14,7 @@ const User = require("./models/User");
 const Message = require("./models/message");
 const ConnectionRequest = require("./models/ConnectionRequest");
 const messageRoutes = require("./routes/messages");
+const groupRoutes = require("./routes/groups");
 const app = express();
 
 const server = http.createServer(app);
@@ -34,7 +35,7 @@ app.use("/api/auth", authRoutes);
 app.use("/api/profile", profileRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/messages", messageRoutes);
-
+app.use("/api/groups", groupRoutes);
 app.get("/", (req, res) => {
   res.send("WebChat backend is running!");
 });
