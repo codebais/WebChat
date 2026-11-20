@@ -1,3 +1,4 @@
+
 import { useEffect, useRef, useState } from "react";
 
 function DesktopChat({ chat }) {
@@ -9,6 +10,19 @@ function DesktopChat({ chat }) {
     requestCount,
     selectedFriend,
     setSelectedFriend,
+    selectedGroup,
+    setSelectedGroup,
+    openGroup,
+    groupMessages,
+    groupMessage,
+    setGroupMessage,
+    groupLoading,
+    sendGroupMessage,
+    groupSelectedFile,
+    setGroupSelectedFile,
+    groupUploading,
+    groupMediaUrls,
+    sendGroupMedia,
     search,
     setSearch,
     messages,
@@ -33,11 +47,57 @@ function DesktopChat({ chat }) {
 
   const [sidebarWidth, setSidebarWidth] = useState(30);
   const [isDragging, setIsDragging] = useState(false);
-  const [activeVideo, setActiveVideo] = useState(null);
   const [showGroupModal, setShowGroupModal] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [selectedMembers, setSelectedMembers] = useState([]);
   const chatContainerRef = useRef(null);
+
+  const displayedMessages = selectedGroup ? groupMessages : messages;
+  const currentFile = selectedGroup ? groupSelectedFile : selectedFile;
+  const currentUploading = selectedGroup ? groupUploading : uploading;
+
+  const handleAttachmentChange = (e) => {
+    const file = e.target.files?.[0] || null;
+
+    if (selectedGroup) {
+      setGroupSelectedFile(file);
+    } else {
+      handleFileSelect({ target: { files: file ? [file] : [] } });
+    }
+
+    e.target.value = "";
+  };
+
+  const handleMediaSend = () => {
+    if (selectedGroup) {
+      sendGroupMedia();
+    } else {
+      sendMedia();
+    }
+  };
+
+  const handleMediaCancel = () => {
+    if (selectedGroup) {
+      setGroupSelectedFile(null);
+    } else {
+      setSelectedFile(null);
+    }
+  };
+
+  const enableNotifications = async () => {
+    if (!("Notification" in window)) {
+      alert("Your browser does not support notifications.");
+      return;
+    }
+
+    const permission = await Notification.requestPermission();
+
+    if (permission === "granted") {
+      alert("Desktop notifications enabled!");
+    } else {
+      alert("Please allow notifications in your browser settings.");
+    }
+  };
 
   useEffect(() => {
     const handlePointerMove = (e) => {
@@ -76,7 +136,10 @@ function DesktopChat({ chat }) {
 
         <div className="mt-10 flex w-full flex-col items-center gap-3">
           <button
-            onClick={() => setSelectedFriend(null)}
+            onClick={() => {
+              setSelectedFriend(null);
+              setSelectedGroup(null);
+            }}
             title="Chats"
             className="flex w-full flex-col items-center gap-2 rounded-xl bg-[#075E54]/30 py-3 text-[#00A884] transition-colors hover:bg-[#075E54]/50"
           >
@@ -182,7 +245,7 @@ function DesktopChat({ chat }) {
         }`}
       >
         <section
-          className="flex shrink-0 flex-col overflow-hidden border-r border-[#2A3942] bg-[#202C33]"
+          className="relative flex shrink-0 flex-col overflow-hidden border-r border-[#2A3942] bg-[#202C33]"
           style={{ width: `${sidebarWidth}%` }}
         >
           <header className="flex h-[72px] shrink-0 items-center px-5">
@@ -192,126 +255,160 @@ function DesktopChat({ chat }) {
           <div className="shrink-0 px-4 pb-3">
             <input
               type="text"
-              placeholder="Search friends..."
+              placeholder="Search friends and groups..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full rounded-full bg-[#2A3942] px-4 py-3 text-sm outline-none"
             />
           </div>
 
-          <div
-            className="flex-1 overflow-y-auto
-              [&::-webkit-scrollbar]:w-[5px]
-              [&::-webkit-scrollbar-track]:bg-[#202C33]
-              [&::-webkit-scrollbar-thumb]:bg-[#2A3942]
-              [&::-webkit-scrollbar-thumb]:rounded-full
-              [&::-webkit-scrollbar-thumb:hover]:bg-[#00A884]
-              [scrollbar-width:thin]
-              [scrollbar-color:#2A3942_#202C33]"
-          >
-{!loading &&
-  groups
-    .filter((group) =>
-      group.name.toLowerCase().includes(search.toLowerCase())
-    )
-    .map((group) => (
-      <div
-        key={group._id}
-        className="flex items-center gap-3 border-b border-[#2A3942] px-4 py-4"
-      >
-        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#075E54] text-xl text-white">
-          <svg
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-            <circle cx="10" cy="7" r="4" />
-            <path d="M20 8a4 4 0 0 1 0 8" />
-            <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-          </svg>
-        </div>
+          {/* <div className="px-4 pb-3">
+            <button
+              onClick={enableNotifications}
+              className="w-full rounded-lg bg-[#075E54] px-4 py-2 text-sm text-white hover:bg-[#008F72]"
+            >
+              Enable Desktop Notifications
+            </button>
+          </div> */}
 
-        <div className="min-w-0 flex-1">
-          <h3 className="truncate font-medium">{group.name}</h3>
-          <p className="mt-1 text-xs text-[#8696A0]">
-            {group.members.length} members
-          </p>
-        </div>
-      </div>
-    ))}
-
+          <div className="flex-1 overflow-y-auto [&::-webkit-scrollbar]:w-[5px] [&::-webkit-scrollbar-track]:bg-[#202C33] [&::-webkit-scrollbar-thumb]:bg-[#2A3942] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb:hover]:bg-[#00A884] [scrollbar-width:thin] [scrollbar-color:#2A3942_#202C33]">
             {loading ? (
               <p className="p-6 text-center text-sm text-[#8696A0]">
                 Loading chats...
               </p>
-) : filteredConnections.length === 0 && groups.length === 0 ? (              <div className="px-6 py-12 text-center">
-                <h3 className="font-semibold">No chats yet</h3>
-
-                <p className="mt-2 text-sm text-[#8696A0]">
-                  Find people and connect with them.
-                </p>
-
-                <button
-                  onClick={() => navigate("/find-people")}
-                  className="mt-5 rounded-lg bg-[#00A884] px-5 py-2 text-sm font-semibold text-white"
-                >
-                  Find People
-                </button>
-              </div>
             ) : (
-              filteredConnections.map((item) => {
-                const friend = item.user;
-
-                return (
-                  <button
-                    key={item.requestId}
-                    onClick={() => setSelectedFriend(friend)}
-                    className={`flex w-full items-center gap-3 border-b border-[#2A3942] px-4 py-4 text-left hover:bg-[#2A3942] ${
-                      selectedFriend?._id === friend._id ? "bg-[#2A3942]" : ""
-                    }`}
-                  >
-                    <div
-                      className={`relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 ${
-                        onlineUsers.includes(friend._id)
-                          ? "border-[#00A884]"
-                          : "border-[#8696A0]"
-                      } bg-[#075E54] font-semibold`}
+              <>
+                {groups
+                  .filter((group) =>
+                    group.name.toLowerCase().includes(search.toLowerCase())
+                  )
+                  .map((group) => (
+                    <button
+                      key={group._id}
+                      type="button"
+                      onClick={() => openGroup(group)}
+                      className={`flex w-full items-center gap-3 border-b border-[#2A3942] px-4 py-4 text-left hover:bg-[#2A3942] ${
+                        selectedGroup?._id === group._id ? "bg-[#2A3942]" : ""
+                      }`}
                     >
-                      {friend.profilePicture ? (
-                        <img
-                          src={getPhoto(friend.profilePicture)}
-                          alt={friend.name}
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        friend.username?.charAt(0).toUpperCase() ||
-                        friend.name?.charAt(0).toUpperCase() ||
-                        "U"
-                      )}
-                    </div>
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#075E54] text-xl text-white">
+                        <svg
+                          width="24"
+                          height="24"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="1.8"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        >
+                          <path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                          <circle cx="10" cy="7" r="4" />
+                          <path d="M20 8a4 4 0 0 1 0 8" />
+                          <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                        </svg>
+                      </div>
 
-                    <div className="min-w-0 flex-1">
-                      <h3 className="truncate font-medium">{friend.name}</h3>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="truncate font-medium">{group.name}</h3>
+                        <p className="mt-1 text-xs text-[#8696A0]">
+                          {group.members?.length || 0} members
+                        </p>
+                      </div>
+                    </button>
+                  ))}
 
-                      <p className="mt-1 truncate text-xs text-[#8696A0]">
-                        @{friend.username || "user"}
-                      </p>
-                    </div>
+                {filteredConnections
+                  .filter((item) => {
+                    const friend = item.user;
+                    const searchText = search.toLowerCase();
 
-                    <span className="hidden text-xs text-[#00A884] lg:inline">
-                      Connected
-                    </span>
-                  </button>
-                );
-              })
+                    return (
+                      friend.name?.toLowerCase().includes(searchText) ||
+                      friend.username?.toLowerCase().includes(searchText)
+                    );
+                  })
+                  .map((item) => {
+                    const friend = item.user;
+
+                    return (
+                      <button
+                        key={item.requestId}
+                        onClick={() => {
+                          setSelectedGroup(null);
+                          setSelectedFriend(friend);
+                        }}
+                        className={`flex w-full items-center gap-3 border-b border-[#2A3942] px-4 py-4 text-left hover:bg-[#2A3942] ${
+                          selectedFriend?._id === friend._id
+                            ? "bg-[#2A3942]"
+                            : ""
+                        }`}
+                      >
+                        <div
+                          className={`relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 ${
+                            onlineUsers.includes(friend._id)
+                              ? "border-[#00A884]"
+                              : "border-[#8696A0]"
+                          } bg-[#075E54] font-semibold`}
+                        >
+                          {friend.profilePicture ? (
+                            <img
+                              src={getPhoto(friend.profilePicture)}
+                              alt={friend.name}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            friend.username?.charAt(0).toUpperCase() ||
+                            friend.name?.charAt(0).toUpperCase() ||
+                            "U"
+                          )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <h3 className="truncate font-medium">
+                            {friend.name}
+                          </h3>
+
+                          <p className="mt-1 truncate text-xs text-[#8696A0]">
+                            @{friend.username || "user"}
+                          </p>
+                        </div>
+
+                        <span className="hidden text-xs text-[#00A884] lg:inline">
+                          Connected
+                        </span>
+                      </button>
+                    );
+                  })}
+
+                {filteredConnections.length === 0 && groups.length === 0 && (
+                  <div className="px-6 py-12 text-center">
+                    <h3 className="font-semibold">No chats yet</h3>
+
+                    <p className="mt-2 text-sm text-[#8696A0]">
+                      Find people and connect with them.
+                    </p>
+
+                    <button
+                      onClick={() => navigate("/find-people")}
+                      className="mt-5 rounded-lg bg-[#00A884] px-5 py-2 text-sm font-semibold text-white"
+                    >
+                      Find People
+                    </button>
+                  </div>
+                )}
+              </>
             )}
           </div>
+
+          <button
+            type="button"
+            onClick={() => setShowGroupModal(true)}
+            title="Create Group"
+            className="absolute bottom-6 right-6 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-[#00A884] text-3xl text-white shadow-xl transition hover:bg-[#008F72]"
+          >
+            +
+          </button>
         </section>
 
         <div
@@ -324,72 +421,90 @@ function DesktopChat({ chat }) {
         </div>
 
         <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-[#111B21]">
-          {selectedFriend ? (
+          {selectedFriend || selectedGroup ? (
             <>
               <header className="flex h-[72px] shrink-0 items-center gap-3 border-b border-[#2A3942] bg-[#202C33] px-6">
                 <div
                   className={`flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 ${
-                    onlineUsers.includes(selectedFriend._id)
-                      ? "border-[#00A884]"
-                      : "border-[#8696A0]"
-                  } bg-[#075E54]`}
+                    selectedGroup
+                      ? "border-[#00A884] bg-[#075E54]"
+                      : onlineUsers.includes(selectedFriend?._id)
+                        ? "border-[#00A884] bg-[#075E54]"
+                        : "border-[#8696A0] bg-[#075E54]"
+                  }`}
                 >
-                  {selectedFriend.profilePicture ? (
+                  {selectedGroup ? (
+                    <svg
+                      width="24"
+                      height="24"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                      <circle cx="10" cy="7" r="4" />
+                      <path d="M20 8a4 4 0 0 1 0 8" />
+                      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
+                    </svg>
+                  ) : selectedFriend?.profilePicture ? (
                     <img
                       src={getPhoto(selectedFriend.profilePicture)}
                       alt={selectedFriend.name}
                       className="h-full w-full object-cover"
                     />
                   ) : (
-                    selectedFriend.username?.charAt(0).toUpperCase() ||
-                    selectedFriend.name?.charAt(0).toUpperCase()
+                    selectedFriend?.username?.charAt(0).toUpperCase() ||
+                    selectedFriend?.name?.charAt(0).toUpperCase()
                   )}
                 </div>
 
                 <div className="min-w-0">
                   <h2 className="truncate font-semibold">
-                    {selectedFriend.name}
+                    {selectedGroup ? selectedGroup.name : selectedFriend.name}
                   </h2>
 
                   <p
                     className={`text-xs ${
-                      onlineUsers.includes(selectedFriend._id)
+                      selectedGroup || onlineUsers.includes(selectedFriend?._id)
                         ? "text-[#00A884]"
                         : "text-[#8696A0]"
                     }`}
                   >
-                    {onlineUsers.includes(selectedFriend._id)
-                      ? "Online"
-                      : "Offline"}
+                    {selectedGroup
+                      ? `${selectedGroup.members?.length || 0} members`
+                      : onlineUsers.includes(selectedFriend?._id)
+                        ? "Online"
+                        : "Offline"}
                   </p>
                 </div>
               </header>
 
               <div
                 ref={messagesContainerRef}
-                className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-6
-                  [&::-webkit-scrollbar]:w-[5px]
-                  [&::-webkit-scrollbar-track]:bg-[#111B21]
-                  [&::-webkit-scrollbar-thumb]:bg-[#2A3942]
-                  [&::-webkit-scrollbar-thumb]:rounded-full
-                  [&::-webkit-scrollbar-thumb:hover]:bg-[#00A884]
-                  [scrollbar-width:thin]
-                  [scrollbar-color:#2A3942_#111B21]"
+                className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-6 [&::-webkit-scrollbar]:w-[5px] [&::-webkit-scrollbar-track]:bg-[#111B21] [&::-webkit-scrollbar-thumb]:bg-[#2A3942] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb:hover]:bg-[#00A884] [scrollbar-width:thin] [scrollbar-color:#2A3942_#111B21]"
               >
-                {messages.length === 0 ? (
+                {selectedGroup && groupLoading ? (
+                  <p className="m-auto text-sm text-[#8696A0]">
+                    Loading group messages...
+                  </p>
+                ) : displayedMessages.length === 0 ? (
                   <div className="m-auto text-center">
                     <h2 className="text-xl font-semibold">
                       Start a conversation
                     </h2>
 
                     <p className="mt-2 text-sm text-[#8696A0]">
-                      Send your first message to {selectedFriend.name}.
+                      Send your first message to{" "}
+                      {selectedGroup ? selectedGroup.name : selectedFriend.name}
+                      .
                     </p>
                   </div>
                 ) : (
-                  messages.map((message) => {
+                  displayedMessages.map((message) => {
                     const senderId = message.sender?._id || message.sender;
-
                     const isMine = senderId === myProfile?._id;
 
                     const status = message.isRead
@@ -408,7 +523,16 @@ function DesktopChat({ chat }) {
                             isMine ? "bg-[#005C4B]" : "bg-[#202C33]"
                           }`}
                         >
-                          {message.mediaType &&
+                          {selectedGroup && !isMine && (
+                            <p className="mb-1 text-xs font-semibold text-[#00A884]">
+                              {message.sender?.username ||
+                                message.sender?.name ||
+                                "User"}
+                            </p>
+                          )}
+
+                          {!selectedGroup &&
+                            message.mediaType &&
                             (mediaUrls?.[message._id] ? (
                               message.mediaType === "image" ? (
                                 <img
@@ -430,12 +554,36 @@ function DesktopChat({ chat }) {
                               </p>
                             ))}
 
+                          {selectedGroup &&
+                            message.mediaType &&
+                            (groupMediaUrls?.[message._id] ? (
+                              message.mediaType === "image" ? (
+                                <img
+                                  src={groupMediaUrls[message._id]}
+                                  alt={message.mediaName || "Group image"}
+                                  className="mt-2 max-h-64 max-w-xs rounded-lg object-contain"
+                                />
+                              ) : (
+                                <video
+                                  src={groupMediaUrls[message._id]}
+                                  controls
+                                  preload="metadata"
+                                  className="mt-2 max-h-64 max-w-xs rounded-lg"
+                                />
+                              )
+                            ) : (
+                              <p className="mt-2 text-sm text-gray-400">
+                                Loading media...
+                              </p>
+                            ))}
+
                           {message.text && (
-                            <p className="text-sm whitespace-pre-wrap">
+                            <p className="whitespace-pre-wrap text-sm">
                               {message.text}
                             </p>
                           )}
-                          {isMine && (
+
+                          {!selectedGroup && isMine && (
                             <div className="mt-1 flex justify-end">
                               <span
                                 className={`text-xs font-semibold ${
@@ -460,7 +608,7 @@ function DesktopChat({ chat }) {
                   </p>
                 )}
 
-                {friendTyping && (
+                {!selectedGroup && friendTyping && (
                   <div className="flex animate-in fade-in duration-200 justify-start">
                     <div className="flex items-center gap-2 rounded-2xl rounded-bl-sm border border-[#2A3942] bg-[#202C33] px-4 py-3 shadow-sm">
                       <div className="flex items-center gap-1">
@@ -479,30 +627,31 @@ function DesktopChat({ chat }) {
               </div>
 
               <form
-                onSubmit={sendMessage}
+                onSubmit={selectedGroup ? sendGroupMessage : sendMessage}
                 className="flex shrink-0 flex-col gap-2 border-t border-[#2A3942] bg-[#202C33] p-4"
               >
-                {selectedFile && (
-                  <div className="flex items-center justify-between rounded-lg bg-[#2A3942] p-3">
-                    <span className="truncate text-sm">
-                      {selectedFile.name}
+                {currentFile && (
+                  <div className="flex items-center justify-between gap-3 rounded-lg bg-[#2A3942] p-3">
+                    <span className="min-w-0 flex-1 truncate text-sm">
+                      {currentFile.name}
                     </span>
 
                     <button
                       type="button"
-                      onClick={() => setSelectedFile(null)}
-                      className="ml-3 text-red-400"
+                      onClick={handleMediaCancel}
+                      disabled={currentUploading}
+                      className="rounded-lg px-3 py-2 text-sm text-red-400 hover:bg-[#354650] disabled:opacity-50"
                     >
-                      Remove
+                      Cancel
                     </button>
 
                     <button
                       type="button"
-                      onClick={sendMedia}
-                      disabled={uploading}
-                      className="ml-3 rounded-lg bg-[#00A884] px-3 py-2 text-sm text-white disabled:opacity-50"
+                      onClick={handleMediaSend}
+                      disabled={currentUploading}
+                      className="rounded-lg bg-[#00A884] px-4 py-2 text-sm font-medium text-white hover:bg-[#008F72] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {uploading ? "Uploading..." : "Send"}
+                      {currentUploading ? "Uploading..." : "Send"}
                     </button>
                   </div>
                 )}
@@ -511,9 +660,9 @@ function DesktopChat({ chat }) {
                   <label className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full bg-[#2A3942] text-[#00A884] hover:bg-[#354650]">
                     <input
                       type="file"
-                      accept="image/jpeg,image/png,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
+                      accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime"
                       className="hidden"
-                      onChange={handleFileSelect}
+                      onChange={handleAttachmentChange}
                     />
 
                     <svg
@@ -532,15 +681,27 @@ function DesktopChat({ chat }) {
 
                   <input
                     type="text"
-                    value={newMessage}
-                    onChange={handleTyping}
-                    placeholder="Type a message..."
+                    value={selectedGroup ? groupMessage : newMessage}
+                    onChange={
+                      selectedGroup
+                        ? (e) => setGroupMessage(e.target.value)
+                        : handleTyping
+                    }
+                    placeholder={
+                      selectedGroup
+                        ? "Message to group..."
+                        : "Type a message..."
+                    }
                     className="min-w-0 flex-1 rounded-full bg-[#2A3942] px-5 py-3 text-sm outline-none"
                   />
 
                   <button
                     type="submit"
-                    disabled={!newMessage.trim()}
+                    disabled={
+                      selectedGroup
+                        ? !groupMessage.trim()
+                        : !newMessage.trim()
+                    }
                     className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#00A884] text-white hover:bg-[#008F72] disabled:opacity-50"
                   >
                     <svg
@@ -566,22 +727,14 @@ function DesktopChat({ chat }) {
                 <h2 className="text-2xl font-semibold">Welcome to WebChat</h2>
 
                 <p className="mt-3 text-sm text-[#8696A0]">
-                  Select a friend from your chat list to open a conversation.
-                  Your accepted connections will appear here.
+                  Select a friend or group from your chat list to open a
+                  conversation.
                 </p>
               </div>
             </div>
           )}
         </main>
       </div>
-      <button
-        type="button"
-        onClick={() => setShowGroupModal(true)}
-        title="Create Group"
-        className="fixed bottom-6 right-6 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[#00A884] text-3xl text-white shadow-xl transition hover:bg-[#008F72]"
-      >
-        +
-      </button>
 
       {showGroupModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
@@ -604,6 +757,7 @@ function DesktopChat({ chat }) {
               type="text"
               placeholder="Enter group name"
               value={groupName}
+              maxLength={50}
               onChange={(e) => setGroupName(e.target.value)}
               className="mb-4 w-full rounded-lg bg-[#2A3942] px-4 py-3 text-white outline-none"
             />
@@ -613,43 +767,49 @@ function DesktopChat({ chat }) {
             </h3>
 
             <div className="max-h-64 space-y-2 overflow-y-auto">
-              {filteredConnections.map((item) => {
-                const friend = item.user;
-                const isSelected = selectedMembers.includes(friend._id);
+              {filteredConnections.length === 0 ? (
+                <p className="py-4 text-center text-sm text-[#8696A0]">
+                  No connected friends available.
+                </p>
+              ) : (
+                filteredConnections.map((item) => {
+                  const friend = item.user;
+                  const isSelected = selectedMembers.includes(friend._id);
 
-                return (
-                  <label
-                    key={item.requestId}
-                    className="flex cursor-pointer items-center gap-3 rounded-lg p-3 hover:bg-[#2A3942]"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => {
-                        setSelectedMembers((previous) =>
-                          isSelected
-                            ? previous.filter((id) => id !== friend._id)
-                            : [...previous, friend._id],
-                        );
-                      }}
-                      className="h-4 w-4 accent-[#00A884]"
-                    />
+                  return (
+                    <label
+                      key={item.requestId}
+                      className="flex cursor-pointer items-center gap-3 rounded-lg p-3 hover:bg-[#2A3942]"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {
+                          setSelectedMembers((previous) =>
+                            isSelected
+                              ? previous.filter((id) => id !== friend._id)
+                              : [...previous, friend._id]
+                          );
+                        }}
+                        className="h-4 w-4 accent-[#00A884]"
+                      />
 
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#075E54] font-semibold text-white">
-                      {friend.username?.charAt(0).toUpperCase() || "U"}
-                    </div>
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#075E54] font-semibold text-white">
+                        {friend.username?.charAt(0).toUpperCase() || "U"}
+                      </div>
 
-                    <div>
-                      <p className="text-sm font-medium text-white">
-                        {friend.name}
-                      </p>
-                      <p className="text-xs text-[#8696A0]">
-                        @{friend.username}
-                      </p>
-                    </div>
-                  </label>
-                );
-              })}
+                      <div>
+                        <p className="text-sm font-medium text-white">
+                          {friend.name}
+                        </p>
+                        <p className="text-xs text-[#8696A0]">
+                          @{friend.username}
+                        </p>
+                      </div>
+                    </label>
+                  );
+                })
+              )}
             </div>
 
             <button

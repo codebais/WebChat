@@ -11,7 +11,13 @@ function useChat() {
   const [groups, setGroups] = useState([]);
   const [selectedFriend, setSelectedFriend] = useState(null);
   const [search, setSearch] = useState("");
-
+  const [selectedGroup, setSelectedGroup] = useState(null);
+  const [groupMessages, setGroupMessages] = useState([]);
+  const [groupMessage, setGroupMessage] = useState("");
+  const [groupLoading, setGroupLoading] = useState(false);
+  const [groupSelectedFile, setGroupSelectedFile] = useState(null);
+  const [groupUploading, setGroupUploading] = useState(false);
+  const [groupMediaUrls, setGroupMediaUrls] = useState({});
   const [messages, setMessages] = useState([]);
   const [mediaUrls, setMediaUrls] = useState({});
   const [messageStatuses, setMessageStatuses] = useState({});
@@ -182,6 +188,93 @@ function useChat() {
     setFriendTyping(false);
     loadMessages();
   }, [selectedFriend]);
+
+  useEffect(() => {
+    if (!selectedGroup) {
+      setGroupMessages([]);
+      return;
+    }
+
+    const loadGroupMessages = async () => {
+      const token = localStorage.getItem("token");
+
+      setGroupLoading(true);
+      setGroupMessages([]);
+
+      try {
+        const response = await fetch(
+          `http://localhost:5000/api/groups/${selectedGroup._id}/messages`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          },
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message || "Unable to load group messages");
+        }
+
+        setGroupMessages(data.messages);
+      } catch (error) {
+        console.error("Group messages error:", error);
+        setChatError(error.message);
+      } finally {
+        setGroupLoading(false);
+      }
+    };
+
+    loadGroupMessages();
+  }, [selectedGroup]);
+
+  useEffect(() => {
+    if (!selectedGroup || groupMessages.length === 0) {
+      setGroupMediaUrls({});
+      return;
+    }
+
+    const loadGroupMedia = async () => {
+      const token = localStorage.getItem("token");
+
+      const mediaMessages = groupMessages.filter(
+        (message) => message.mediaKey && message.mediaType,
+      );
+
+      const urls = {};
+
+      await Promise.all(
+        mediaMessages.map(async (message) => {
+          try {
+            const response = await fetch(
+              `http://localhost:5000/api/groups/media/${message._id}/url`,
+              {
+                headers: {
+                  Authorization: `Bearer ${token}`,
+                },
+              },
+            );
+
+            const data = await response.json();
+
+            if (response.ok) {
+              urls[message._id] = data.mediaUrl;
+            }
+          } catch (error) {
+            console.error("Group media URL error:", error);
+          }
+        }),
+      );
+
+      setGroupMediaUrls((previous) => ({
+        ...previous,
+        ...urls,
+      }));
+    };
+
+    loadGroupMedia();
+  }, [selectedGroup, groupMessages]);
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -359,7 +452,7 @@ function useChat() {
       messagesContainerRef.current.scrollTop =
         messagesContainerRef.current.scrollHeight;
     }
-  }, [messages, friendTyping, selectedFriend]);
+  }, [messages, groupMessages, friendTyping, selectedFriend, selectedGroup]);
 
   useEffect(() => {
     const handleNewGroup = (group) => {
@@ -378,6 +471,38 @@ function useChat() {
       socket.off("new_group", handleNewGroup);
     };
   }, []);
+
+  useEffect(() => {
+    const handleGroupMessage = (message) => {
+      const messageGroupId = message.group?._id || message.group;
+
+      if (messageGroupId !== selectedGroup?._id) return;
+
+      setGroupMessages((previous) => {
+        const exists = previous.some((item) => item._id === message._id);
+
+        if (exists) return previous;
+
+        return [...previous, message];
+      });
+    };
+
+    socket.on("new_group_message", handleGroupMessage);
+
+    return () => {
+      socket.off("new_group_message", handleGroupMessage);
+    };
+  }, [selectedGroup]);
+
+  const openGroup = (group) => {
+    setSelectedFriend(null);
+    setSelectedGroup(group);
+    setMessages([]);
+    setGroupMessages([]);
+    setGroupMessage("");
+    setChatError("");
+  };
+
   const getPhoto = (picture) => {
     if (!picture) return "";
 
@@ -564,6 +689,102 @@ function useChat() {
     setChatError("");
   };
 
+  const sendGroupMessage = async (e) => {
+    e.preventDefault();
+
+    if (!groupMessage.trim() || !selectedGroup) return;
+
+    const token = localStorage.getItem("token");
+
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `http://localhost:5000/api/groups/${selectedGroup._id}/messages`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            text: groupMessage,
+          }),
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to send group message");
+      }
+
+      setGroupMessages((previous) => {
+        const exists = previous.some(
+          (message) => message._id === data.groupMessage._id,
+        );
+
+        return exists ? previous : [...previous, data.groupMessage];
+      });
+
+      setGroupMessage("");
+      setChatError("");
+    } catch (error) {
+      setChatError(error.message);
+    }
+  };
+
+  const sendGroupMedia = async () => {
+    if (!selectedGroup || !groupSelectedFile) return;
+
+    const token = localStorage.getItem("token");
+    const formData = new FormData();
+
+    formData.append("media", groupSelectedFile);
+
+    setGroupUploading(true);
+    setChatError("");
+
+    try {
+      const response = await fetch(
+        `http://localhost:5000/api/groups/${selectedGroup._id}/upload`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formData,
+        },
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Group media upload failed");
+      }
+
+      setGroupMessages((previous) => {
+        const exists = previous.some(
+          (item) => item._id === data.groupMessage._id,
+        );
+
+        if (exists) return previous;
+
+        return [...previous, data.groupMessage];
+      });
+
+      setGroupSelectedFile(null);
+    } catch (error) {
+      console.error("Group media upload error:", error);
+      setChatError(error.message);
+    } finally {
+      setGroupUploading(false);
+    }
+  };
+
   return {
     navigate,
     myProfile,
@@ -573,6 +794,19 @@ function useChat() {
     requestCount,
     selectedFriend,
     setSelectedFriend,
+    selectedGroup,
+    setSelectedGroup,
+    openGroup,
+    groupMessages,
+    groupMessage,
+    setGroupMessage,
+    groupLoading,
+    sendGroupMessage,
+    groupSelectedFile,
+    setGroupSelectedFile,
+    groupUploading,
+    groupMediaUrls,
+    sendGroupMedia,
     search,
     setSearch,
     messages,
